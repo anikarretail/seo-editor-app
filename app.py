@@ -20,13 +20,7 @@ def load_data(key):
     obj = s3.get_object(Bucket=BUCKET, Key=key)
     return pd.read_csv(io.BytesIO(obj['Body'].read()))
 
-            df['seo_done'] = df.get('seo_done', False)
-                        df['seo_done'] = df['seo_done'].astype(bool)
-            for row_idx in range(start_idx, end_idx):
-                row = editable_df.iloc[row_idx]
-                if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
-                    df.at[row['index'], 'seo_done'] = True
-            save_data(df, key):
+def save_data(df, key):
     buffer = io.StringIO()
     df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
@@ -34,20 +28,18 @@ def load_data(key):
 def seo_editor_app(label, df, key):
     st.header(f"📝 SEO Description Editor – {label}")
 
+    # Ensure seo_done exists
+    if 'seo_done' not in df.columns:
+        df['seo_done'] = False
+
     batch_size = 5
     if 'start_idx' not in st.session_state:
         st.session_state['start_idx'] = 0
     start_idx = st.session_state['start_idx']
     end_idx = start_idx + batch_size
 
-    
-try:
-    existing_df = load_data(key)
-    completed_skus = existing_df[existing_df['seo_done'] == True]['Handle'].tolist()
-    editable_df = df[df['Handle'].isin(completed_skus) == False].reset_index()
-except:
-    df['seo_done'] = False
-    editable_df = df[df['desc (product.metafields.custom.desc)'].notnull()].reset_index()
+    df['seo_done'] = df['seo_done'].astype(bool)
+    editable_df = df[(df['desc (product.metafields.custom.desc)'].notnull()) & (~df['seo_done'])].reset_index()
 
     if end_idx > len(editable_df):
         end_idx = len(editable_df)
@@ -58,20 +50,19 @@ except:
         row = editable_df.iloc[row_idx]
         col = cols[i % 2]
         with col.container():
-            with col:
-                st.markdown(
-                    '<div style="background-color:#f7f9fc;padding:15px;border-radius:10px;">',
-                    unsafe_allow_html=True
-                )
-                st.markdown(f"**SKU:** {row['Handle']}")
-                current_desc = row['desc (product.metafields.custom.desc)'] or row.get('Body (HTML)', 'No description available.')
-                st.markdown(f"**Current Description:** {current_desc}")
-                fabric = row.get('fabric', '')
-                prompt = f"Write a short SEO-optimized product description (max 150 chars) for a Bandisha {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
-                st.code(prompt, language='text')
-                new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{row_idx}')
-                st.markdown("</div>", unsafe_allow_html=True)
-                editable_df.at[row_idx, 'new_desc'] = new_desc
+            st.markdown(
+                '<div style="background-color:#f7f9fc;padding:15px;border-radius:10px;">',
+                unsafe_allow_html=True
+            )
+            st.markdown(f"**SKU:** {row['Handle']}")
+            current_desc = row['desc (product.metafields.custom.desc)'] or row.get('Body (HTML)', 'No description available.')
+            st.markdown(f"**Current Description:** {current_desc}")
+            fabric = row.get('fabric', '')
+            prompt = f"Write a short SEO-optimized product description (max 150 chars) for a Bandisha {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
+            st.code(prompt, language='text')
+            new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{row_idx}')
+            st.markdown("</div>", unsafe_allow_html=True)
+            editable_df.at[row_idx, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
         for row_idx in range(start_idx, end_idx):
@@ -82,14 +73,9 @@ except:
                 df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
+                df.at[original_index, 'seo_done'] = True
 
-                    df['seo_done'] = df.get('seo_done', False)
-                        df['seo_done'] = df['seo_done'].astype(bool)
-            for row_idx in range(start_idx, end_idx):
-                row = editable_df.iloc[row_idx]
-                if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
-                    df.at[row['index'], 'seo_done'] = True
-            save_data(df, key)
+        save_data(df, key)
         st.session_state['start_idx'] = end_idx if end_idx < len(editable_df) else 0
         st.rerun()
 
