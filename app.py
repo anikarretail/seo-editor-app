@@ -28,9 +28,11 @@ def save_data(df, key):
 def seo_editor_app(label, df, key):
     st.header(f"📝 SEO Description Editor – {label}")
 
-    # Ensure seo_done exists
     if 'seo_done' not in df.columns:
         df['seo_done'] = False
+
+    df['seo_done'] = df['seo_done'].astype(bool)
+    df['seo_done'] = df['seo_done'] & df['desc (product.metafields.custom.desc)'].notnull()
 
     batch_size = 5
     if 'start_idx' not in st.session_state:
@@ -38,8 +40,6 @@ def seo_editor_app(label, df, key):
     start_idx = st.session_state['start_idx']
     end_idx = start_idx + batch_size
 
-    df['seo_done'] = df['seo_done'].astype(bool)
-        df['seo_done'] = df['seo_done'] & df['desc (product.metafields.custom.desc)'].notnull()
     editable_df = df[(df['desc (product.metafields.custom.desc)'].notnull()) & (~df['seo_done'])].reset_index()
 
     if end_idx > len(editable_df):
@@ -74,8 +74,7 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
-                                    if new_text:
-                        df.at[original_index, 'seo_done'] = True
+                df.at[original_index, 'seo_done'] = True
 
         save_data(df, key)
         st.session_state['start_idx'] = end_idx if end_idx < len(editable_df) else 0
