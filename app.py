@@ -1,6 +1,6 @@
 
 import streamlit as st
-st.set_page_config(layout="wide")  # ✅ Must be the first Streamlit command
+st.set_page_config(layout="wide")
 
 import boto3
 import pandas as pd
@@ -28,40 +28,41 @@ def save_data(df, key):
 def seo_editor_app(label, df, key):
     st.header(f"📝 SEO Description Editor – {label}")
 
-    df = df[df['desc (product.metafields.custom.desc)'].notnull()].copy()
-    df['edited'] = False
-
     batch_size = 10
     start_idx = st.session_state.get('start_idx', 0)
     end_idx = start_idx + batch_size
-    if end_idx > len(df):
-        end_idx = len(df)
+
+    editable_df = df[df['desc (product.metafields.custom.desc)'].notnull()].reset_index()
+    if end_idx > len(editable_df):
+        end_idx = len(editable_df)
 
     cols = st.columns(2)
 
-    for i, idx in enumerate(range(start_idx, end_idx)):
-        row = df.iloc[idx]
+    for i, row_idx in enumerate(range(start_idx, end_idx)):
+        row = editable_df.iloc[row_idx]
         col = cols[i % 2]
-        with col.container():
+        with col.container():\n                st.markdown('''<div style="background-color:#f7f9fc;padding:15px;border-radius:10px">''', unsafe_allow_html=True)
             st.markdown(f"**SKU:** {row['Handle']}")
-            current_desc = row.get('desc (product.metafields.custom.desc)') or row.get('Body (HTML)', 'No description available.')
+            current_desc = row['desc (product.metafields.custom.desc)'] or row.get('Body (HTML)', 'No description available.')
             st.markdown(f"**Current Description:** {current_desc}")
             fabric = row.get('fabric', '')
-            prompt = f"Give me a compelling SEO description for a {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
+            prompt = f"Write a short SEO-optimized product description (max 150 chars) for a Bandisha {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
             st.code(prompt, language='text')
-            new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{idx}')
-            df.at[idx, 'new_desc'] = new_desc
+                            st.markdown('</div>', unsafe_allow_html=True)\n                new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{row_idx}')
+            editable_df.at[row_idx, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
-        for idx in range(start_idx, end_idx):
-            new_text = df.at[idx, 'new_desc']
+        for row_idx in range(start_idx, end_idx):
+            row = editable_df.iloc[row_idx]
+            new_text = row.get('new_desc')
             if pd.notnull(new_text) and new_text.strip():
-                df.at[idx, 'desc (product.metafields.custom.desc)'] = new_text
-                df.at[idx, 'SEO Description'] = new_text
-                df.at[idx, 'Body (HTML)'] = new_text
-                df.at[idx, 'edited'] = True
-        save_data(df[df['edited']], key)
-        st.session_state['start_idx'] = end_idx if end_idx < len(df) else 0
+                original_index = row['index']
+                df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
+                df.at[original_index, 'SEO Description'] = new_text
+                df.at[original_index, 'Body (HTML)'] = new_text
+
+        save_data(df, key)
+        st.session_state['start_idx'] = end_idx if end_idx < len(editable_df) else 0
         st.rerun()
 
 tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
