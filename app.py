@@ -28,8 +28,10 @@ def save_data(df, key):
 def seo_editor_app(label, df, key):
     st.header(f"📝 SEO Description Editor – {label}")
 
-    batch_size = 10
-    start_idx = st.session_state.get('start_idx', 0)
+    batch_size = 5
+    if 'start_idx' not in st.session_state:
+        st.session_state['start_idx'] = 0
+    start_idx = st.session_state['start_idx']
     end_idx = start_idx + batch_size
 
     editable_df = df[df['desc (product.metafields.custom.desc)'].notnull()].reset_index()
