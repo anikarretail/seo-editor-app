@@ -20,8 +20,8 @@ def load_data(key):
     obj = s3.get_object(Bucket=BUCKET, Key=key)
     return pd.read_csv(io.BytesIO(obj['Body'].read()))
 
-df['seo_done'] = df.get('seo_done', False)
-            df['seo_done'] = df['seo_done'].astype(bool)
+            df['seo_done'] = df.get('seo_done', False)
+                        df['seo_done'] = df['seo_done'].astype(bool)
             for row_idx in range(start_idx, end_idx):
                 row = editable_df.iloc[row_idx]
                 if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
@@ -83,8 +83,8 @@ except:
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
 
-        df['seo_done'] = df.get('seo_done', False)
-            df['seo_done'] = df['seo_done'].astype(bool)
+                    df['seo_done'] = df.get('seo_done', False)
+                        df['seo_done'] = df['seo_done'].astype(bool)
             for row_idx in range(start_idx, end_idx):
                 row = editable_df.iloc[row_idx]
                 if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
