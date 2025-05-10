@@ -1,5 +1,6 @@
-
 import streamlit as st
+st.set_page_config(layout="wide")  # Must be first Streamlit command
+
 import boto3
 import pandas as pd
 import io
