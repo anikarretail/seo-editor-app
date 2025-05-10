@@ -20,7 +20,13 @@ def load_data(key):
     obj = s3.get_object(Bucket=BUCKET, Key=key)
     return pd.read_csv(io.BytesIO(obj['Body'].read()))
 
-def save_data(df, key):
+def df['seo_done'] = df.get('seo_done', False)
+            df['seo_done'] = df['seo_done'].astype(bool)
+            for row_idx in range(start_idx, end_idx):
+                row = editable_df.iloc[row_idx]
+                if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
+                    df.at[row['index'], 'seo_done'] = True
+            save_data(df, key):
     buffer = io.StringIO()
     df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
@@ -34,7 +40,15 @@ def seo_editor_app(label, df, key):
     start_idx = st.session_state['start_idx']
     end_idx = start_idx + batch_size
 
+    
+try:
+    existing_df = load_data(key)
+    completed_skus = existing_df[existing_df['seo_done'] == True]['Handle'].tolist()
+    editable_df = df[df['Handle'].isin(completed_skus) == False].reset_index()
+except:
+    df['seo_done'] = False
     editable_df = df[df['desc (product.metafields.custom.desc)'].notnull()].reset_index()
+
     if end_idx > len(editable_df):
         end_idx = len(editable_df)
 
@@ -69,7 +83,13 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
 
-        save_data(df, key)
+        df['seo_done'] = df.get('seo_done', False)
+            df['seo_done'] = df['seo_done'].astype(bool)
+            for row_idx in range(start_idx, end_idx):
+                row = editable_df.iloc[row_idx]
+                if pd.notnull(row.get('new_desc')) and row.get('new_desc').strip():
+                    df.at[row['index'], 'seo_done'] = True
+            save_data(df, key)
         st.session_state['start_idx'] = end_idx if end_idx < len(editable_df) else 0
         st.rerun()
 
