@@ -32,21 +32,25 @@ def seo_editor_app(label, df, key):
         df['seo_done'] = ''
     df['seo_done'] = df['seo_done'].fillna('')
 
+    # Keep reference to original DataFrame index
+    df.reset_index(inplace=True)
+
+    # Only editable entries
+    editable_df = df[(df['Title'].notnull()) & (df['Title'] != '') & 
+                     (df['desc (product.metafields.custom.desc)'].notnull()) &
+                     (df['seo_done'] == '')].copy()
+
     batch_size = 5
     if 'start_idx' not in st.session_state:
         st.session_state['start_idx'] = 0
+
     start_idx = st.session_state['start_idx']
     end_idx = start_idx + batch_size
 
-    editable_df = df[(df['Title'].notnull()) & (df['Title'] != '') & (df['desc (product.metafields.custom.desc)'].notnull()) & (df['seo_done'] == '')].reset_index()
-
-    if end_idx > len(editable_df):
-        end_idx = len(editable_df)
-
+    pending_batch = editable_df.iloc[start_idx:end_idx]
     cols = st.columns(2)
 
-    for i, row_idx in enumerate(range(start_idx, end_idx)):
-        row = editable_df.iloc[row_idx]
+    for i, (_, row) in enumerate(pending_batch.iterrows()):
         col = cols[i % 2]
         with col.container():
             st.markdown(
@@ -59,24 +63,23 @@ def seo_editor_app(label, df, key):
             fabric = row.get('fabric', '')
             prompt = f"Write a short SEO-optimized product description (max 150 chars) for a Bandisha {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
             st.code(prompt, language='text')
-            new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{row_idx}')
+            new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{i}')
             st.markdown("</div>", unsafe_allow_html=True)
-            editable_df.at[row_idx, 'new_desc'] = new_desc
+            pending_batch.at[row.name, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
-        for row_idx in range(start_idx, end_idx):
-            row = editable_df.iloc[row_idx]
+        for _, row in pending_batch.iterrows():
             new_text = row.get('new_desc')
             if pd.notnull(new_text) and new_text.strip():
                 original_index = row['index']
                 df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
-                if df.at[original_index, 'Title'] not in [None, '']:
-                    df.at[original_index, 'seo_done'] = 'TRUE'
+                df.at[original_index, 'seo_done'] = 'TRUE'
 
-        save_data(df, key)
-        st.session_state['start_idx'] = 0
+        # Save full data and move to next batch
+        save_data(df.drop(columns='index'), key)
+        st.session_state['start_idx'] += batch_size
         st.rerun()
 
 tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
