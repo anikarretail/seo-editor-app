@@ -1,4 +1,3 @@
-
 import streamlit as st
 import boto3
 import pandas as pd
@@ -30,13 +29,15 @@ def seo_editor_app(label, df, key):
     for i in range(len(df)):
         row = df.iloc[i]
         st.markdown(f"**SKU:** {row['Handle']}")
-        st.markdown(f"**Current Description:** {row['desc']}")
-        
-        chat_prompt = f"""Give me a compelling SEO description for a {row.get('fabric', 'saree')} saree based on: \"{row['desc']}, {row['product_type']}\""""
-        st.code(chat_prompt, language='text')
+
+        current_desc = row.get('desc (product.metafields.custom.desc)') or row.get('Body (HTML)', 'No description available.')
+        st.markdown(f"**Current Description:** {current_desc}")
+
+        prompt = f"""Give me a compelling SEO description for a {row.get('fabric', 'saree')} saree based on: \"{current_desc}, {row.get('product_type', '')}\""""
+        st.code(prompt, language='text')
 
         new_desc = st.text_area(f"Paste new SEO description for SKU {row['Handle']}:", key=f'desc_input_{i}')
-        
+
         if st.button(f"✅ Submit for {row['Handle']}", key=f'submit_{i}'):
             df.at[i, 'desc (product.metafields.custom.desc)'] = new_desc
             df.at[i, 'SEO Description'] = new_desc
@@ -46,7 +47,6 @@ def seo_editor_app(label, df, key):
             save_data(df[df['edited']], key)
             st.rerun()
 
-# Choose product type
 tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
 
 if tab == 'Wedding':
