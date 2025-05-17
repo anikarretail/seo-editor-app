@@ -19,9 +19,20 @@ def load_data(key):
     obj = s3.get_object(Bucket=BUCKET, Key=key)
     return pd.read_csv(io.BytesIO(obj['Body'].read()))
 
-def save_data(df, key):
+def append_updated_rows(df_batch, key):
+    try:
+        # Try to read existing updated file
+        existing_obj = s3.get_object(Bucket=BUCKET, Key=key)
+        existing_df = pd.read_csv(io.BytesIO(existing_obj['Body'].read()))
+        combined_df = pd.concat([existing_df, df_batch], ignore_index=True)
+        combined_df.drop_duplicates(subset=['Handle', 'Image Src'], keep='last', inplace=True)
+    except s3.exceptions.NoSuchKey:
+        # If file doesn't exist, this is the first write
+        combined_df = df_batch
+
+    # Save combined data
     buffer = io.StringIO()
-    df.to_csv(buffer, index=False)
+    combined_df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
 
 def seo_editor_app(label, df, key):
@@ -70,6 +81,8 @@ def seo_editor_app(label, df, key):
             pending_batch.at[row.name, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
+        updated_rows = []
+
         for _, row in pending_batch.iterrows():
             new_text = row.get('new_desc')
             if pd.notnull(new_text) and new_text.strip():
@@ -78,9 +91,12 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
                 df.at[original_index, 'seo_done'] = 'TRUE'
+                updated_rows.append(df.loc[original_index])
 
-        # Save full updated dataframe (not filtered — includes new TRUEs)
-        save_data(df.drop(columns='index'), key)
+        # Save only newly updated rows to the updated file
+        if updated_rows:
+            updated_df = pd.DataFrame(updated_rows).drop(columns='index')
+            append_updated_rows(updated_df, key)
 
         st.session_state['start_idx'] += batch_size
         st.rerun()
