@@ -15,9 +15,30 @@ UPDATED_WEDDING = 'shopify_wedding_updated.csv'
 s3 = boto3.client('s3')
 
 @st.cache_data
-def load_data(key):
-    obj = s3.get_object(Bucket=BUCKET, Key=key)
-    return pd.read_csv(io.BytesIO(obj['Body'].read()))
+def load_data(source_key, updated_key):
+    # Load base data
+    obj = s3.get_object(Bucket=BUCKET, Key=source_key)
+    base_df = pd.read_csv(io.BytesIO(obj['Body'].read()))
+
+    # Try to load updated data if it exists
+    try:
+        updated_obj = s3.get_object(Bucket=BUCKET, Key=updated_key)
+        updated_df = pd.read_csv(io.BytesIO(updated_obj['Body'].read()))
+
+        # Get only seo_done = TRUE rows from updated data
+        updated_true_df = updated_df[updated_df['seo_done'] == 'TRUE']
+
+        # Merge TRUE status back into base_df
+        merged_df = base_df.merge(
+            updated_true_df[['Handle', 'Image Src', 'seo_done']],
+            on=['Handle', 'Image Src'],
+            how='left'
+        )
+        base_df['seo_done'] = merged_df['seo_done'].fillna('')
+    except s3.exceptions.NoSuchKey:
+        base_df['seo_done'] = ''
+
+    return base_df
 
 def append_rows_by_handle(df, updated_handles, key):
     # Get all rows for updated handles
@@ -104,8 +125,8 @@ def seo_editor_app(label, df, key):
 tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
 
 if tab == 'Wedding':
-    df = load_data(WEDDING_KEY)
+    df = load_data(WEDDING_KEY, UPDATED_WEDDING)
     seo_editor_app("Wedding", df, UPDATED_WEDDING)
 elif tab == 'Trending':
-    df = load_data(TRENDING_KEY)
+    df = load_data(TRENDING_KEY, UPDATED_TRENDING)
     seo_editor_app("Trending", df, UPDATED_TRENDING)
