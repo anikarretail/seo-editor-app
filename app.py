@@ -19,74 +19,69 @@ def load_data(source_key, updated_key):
     obj = s3.get_object(Bucket=BUCKET, Key=source_key)
     base_df = pd.read_csv(io.BytesIO(obj['Body'].read()))
     base_df.columns = base_df.columns.str.strip()
-
-    # Default to empty seo_done
     base_df['seo_done'] = ''
 
-    # Try to load updated data
+    # Merge in any completed handles
     try:
-        updated_obj = s3.get_object(Bucket=BUCKET, Key=updated_key)
-        updated_df = pd.read_csv(io.BytesIO(updated_obj['Body'].read()))
-        updated_df.columns = updated_df.columns.str.strip()
-
-        if 'seo_done' in updated_df.columns:
-            true_handles = updated_df[updated_df['seo_done'].astype(str).str.upper() == 'TRUE']['Handle'].unique()
-            base_df['seo_done'] = base_df['Handle'].apply(lambda h: 'TRUE' if h in true_handles else '')
+        upd = pd.read_csv(io.BytesIO(
+            s3.get_object(Bucket=BUCKET, Key=updated_key)['Body'].read()
+        ))
+        upd.columns = upd.columns.str.strip()
+        if 'seo_done' in upd.columns:
+            done_handles = upd.loc[
+                upd['seo_done'].astype(str).str.upper() == 'TRUE',
+                'Handle'
+            ].unique()
+            base_df['seo_done'] = base_df['Handle'].apply(
+                lambda h: 'TRUE' if h in done_handles else ''
+            )
     except s3.exceptions.NoSuchKey:
-        pass  # First time use
+        pass
 
     return base_df
 
 def append_rows_by_handle(df, updated_handles, key):
-    # Get all rows for updated handles
-    subset_df = df[df['Handle'].isin(updated_handles)].drop(columns='index')
-
-    # Try to read existing file and append
+    subset = df[df['Handle'].isin(updated_handles)].drop(columns='index')
     try:
-        existing_obj = s3.get_object(Bucket=BUCKET, Key=key)
-        existing_df = pd.read_csv(io.BytesIO(existing_obj['Body'].read()))
-        combined_df = pd.concat([existing_df, subset_df], ignore_index=True)
+        existing = pd.read_csv(io.BytesIO(
+            s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
+        ))
+        combined = pd.concat([existing, subset], ignore_index=True)
     except s3.exceptions.NoSuchKey:
-        combined_df = subset_df
+        combined = subset
 
-    # Save combined version
-    buffer = io.StringIO()
-    combined_df.to_csv(buffer, index=False)
-    s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
+    buf = io.StringIO()
+    combined.to_csv(buf, index=False)
+    s3.put_object(Bucket=BUCKET, Key=key, Body=buf.getvalue())
 
 def seo_editor_app(label, df, key):
     st.header(f"📝 SEO Description Editor – {label}")
 
-    if 'seo_done' not in df.columns:
-        df['seo_done'] = ''
-    df['seo_done'] = df['seo_done'].fillna('')
-
-    # Keep reference to original DataFrame index
+    df['seo_done'] = df.get('seo_done', '').fillna('')
     df.reset_index(inplace=True)
 
-    # Only editable entries
-    editable_df = df[
-        (df['Title'].notnull()) & 
-        (df['Title'] != '') & 
-        (df['desc (product.metafields.custom.desc)'].notnull()) & 
+    editable = df[
+        df['Title'].notnull() &
+        (df['Title'] != '') &
+        df['desc (product.metafields.custom.desc)'].notnull() &
         (df['seo_done'] == '')
     ].copy()
 
-    if editable_df.empty:
+    # **If nothing left to edit, show success and EXIT before the button.**
+    if editable.empty:
         st.success(f"✅ All {label.lower()} products are complete! Nothing left to edit.")
         return
 
+    # Otherwise, show your batch UI + Submit
     batch_size = 5
     if 'start_idx' not in st.session_state:
         st.session_state['start_idx'] = 0
 
-    start_idx = st.session_state['start_idx']
-    end_idx = start_idx + batch_size
-
-    pending_batch = editable_df.iloc[start_idx:end_idx]
+    start = st.session_state['start_idx']
+    pending = editable.iloc[start:start + batch_size]
     cols = st.columns(2)
 
-    for i, (_, row) in enumerate(pending_batch.iterrows()):
+    for i, (_, row) in enumerate(pending.iterrows()):
         col = cols[i % 2]
         with col.container():
             st.markdown(
@@ -94,26 +89,29 @@ def seo_editor_app(label, df, key):
                 unsafe_allow_html=True
             )
             st.markdown(f"**SKU:** {row['Handle']}")
-            current_desc = row['desc (product.metafields.custom.desc)'] or row.get('Body (HTML)', 'No description available.')
-            st.markdown(f"**Current Description:** {current_desc}")
+            desc = row['desc (product.metafields.custom.desc)'] or row.get('Body (HTML)', 'No description available.')
+            st.markdown(f"**Current Description:** {desc}")
             fabric = row.get('fabric', '')
-            prompt = f"Write a short SEO-optimized product description (max 150 chars) for a Bandisha {fabric} saree based on: \"{current_desc}, {row.get('product_type', '')}\""
+            prompt = (
+                f"Write a short SEO-optimized product description "
+                f"(max 150 chars) for a Bandisha {fabric} saree based on: "
+                f"\"{desc}, {row.get('product_type','')}\""
+            )
             st.code(prompt, language='text')
-            new_desc = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{i}')
+            new = st.text_area(f"New SEO description for SKU {row['Handle']}:", key=f'desc_input_{i}')
+            pending.at[row.name, 'new_desc'] = new
             st.markdown("</div>", unsafe_allow_html=True)
-            pending_batch.at[row.name, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
         updated_handles = set()
-
-        for _, row in pending_batch.iterrows():
-            new_text = row.get('new_desc')
-            if pd.notnull(new_text) and new_text.strip():
-                original_index = row['index']
-                df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
-                df.at[original_index, 'SEO Description'] = new_text
-                df.at[original_index, 'Body (HTML)'] = new_text
-                df.at[original_index, 'seo_done'] = 'TRUE'
+        for _, row in pending.iterrows():
+            text = row.get('new_desc')
+            if pd.notnull(text) and text.strip():
+                idx = row['index']
+                df.at[idx, 'desc (product.metafields.custom.desc)'] = text
+                df.at[idx, 'SEO Description'] = text
+                df.at[idx, 'Body (HTML)'] = text
+                df.at[idx, 'seo_done'] = 'TRUE'
                 updated_handles.add(row['Handle'])
 
         if updated_handles:
@@ -122,12 +120,11 @@ def seo_editor_app(label, df, key):
         st.session_state['start_idx'] += batch_size
         st.rerun()
 
-# 📦 Choose product type
-tab = st.selectbox("Choose Product Type", ['Trending', 'Wedding'])
-
-if tab == 'Trending':
-    df = load_data(TRENDING_KEY, UPDATED_TRENDING)
-    seo_editor_app("Trending", df, UPDATED_TRENDING)
-elif tab == 'Wedding':
-    df = load_data(WEDDING_KEY, UPDATED_WEDDING)
-    seo_editor_app("Wedding", df, UPDATED_WEDDING)
+# ——— UI Entry Point ——————————————
+choice = st.selectbox("Choose Product Type", ['Trending', 'Wedding'])
+if choice == 'Trending':
+    df_tr = load_data(TRENDING_KEY, UPDATED_TRENDING)
+    seo_editor_app("Trending", df_tr, UPDATED_TRENDING)
+else:
+    df_wed = load_data(WEDDING_KEY, UPDATED_WEDDING)
+    seo_editor_app("Wedding", df_wed, UPDATED_WEDDING)
