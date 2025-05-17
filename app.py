@@ -35,9 +35,12 @@ def seo_editor_app(label, df, key):
     df.reset_index(inplace=True)
 
     # Only editable entries
-    editable_df = df[(df['Title'].notnull()) & (df['Title'] != '') & 
-                     (df['desc (product.metafields.custom.desc)'].notnull()) &
-                     (df['seo_done'] == '')].copy()
+    editable_df = df[
+        (df['Title'].notnull()) & 
+        (df['Title'] != '') & 
+        (df['desc (product.metafields.custom.desc)'].notnull()) & 
+        (df['seo_done'] == '')
+    ].copy()
 
     batch_size = 5
     if 'start_idx' not in st.session_state:
@@ -76,9 +79,8 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'Body (HTML)'] = new_text
                 df.at[original_index, 'seo_done'] = 'TRUE'
 
-        # Save only rows where seo_done is not TRUE
-	# Save the full updated dataframe (includes new TRUEs)
-	save_data(df.drop(columns='index'), key)
+        # Save full updated dataframe (not filtered — includes new TRUEs)
+        save_data(df.drop(columns='index'), key)
 
         st.session_state['start_idx'] += batch_size
         st.rerun()
