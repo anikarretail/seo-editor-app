@@ -1,4 +1,3 @@
-
 import streamlit as st
 st.set_page_config(layout="wide")
 
@@ -70,15 +69,18 @@ def seo_editor_app(label, df, key):
     if st.button("✅ Submit This Batch"):
         for _, row in pending_batch.iterrows():
             new_text = row.get('new_desc')
-            if pd.notnull(new_text) and new_text.strip() and df.at[original_index, 'seo_done'] != 'TRUE':
+            if pd.notnull(new_text) and new_text.strip():
                 original_index = row['index']
                 df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
                 df.at[original_index, 'seo_done'] = 'TRUE'
 
-        # Save full data and move to next batch
-        save_data(df.drop(columns='index'), key)
+        # Save only rows where seo_done is not TRUE
+        unsaved_df = df[df['seo_done'] != 'TRUE'].drop(columns='index')
+        if not unsaved_df.empty:
+            save_data(unsaved_df, key)
+
         st.session_state['start_idx'] += batch_size
         st.rerun()
 
