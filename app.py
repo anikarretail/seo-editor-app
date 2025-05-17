@@ -25,11 +25,11 @@ def load_data(source_key, updated_key):
         updated_obj = s3.get_object(Bucket=BUCKET, Key=updated_key)
         updated_df = pd.read_csv(io.BytesIO(updated_obj['Body'].read()))
 
-        # Extract handles marked as seo_done = TRUE
-        done_handles = updated_df[updated_df['seo_done'] == 'TRUE']['Handle'].unique()
+        # ✅ Get all handles where at least one row has seo_done = TRUE
+        true_handles = updated_df.loc[updated_df['seo_done'] == 'TRUE', 'Handle'].unique()
 
-        # Mark seo_done = TRUE for all matching handles in base_df
-        base_df['seo_done'] = base_df['Handle'].apply(lambda h: 'TRUE' if h in done_handles else '')
+        # ✅ Mark all rows in base_df as TRUE if handle was done earlier
+        base_df['seo_done'] = base_df['Handle'].apply(lambda h: 'TRUE' if h in true_handles else '')
     except s3.exceptions.NoSuchKey:
         base_df['seo_done'] = ''
 
