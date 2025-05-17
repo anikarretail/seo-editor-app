@@ -25,16 +25,11 @@ def load_data(source_key, updated_key):
         updated_obj = s3.get_object(Bucket=BUCKET, Key=updated_key)
         updated_df = pd.read_csv(io.BytesIO(updated_obj['Body'].read()))
 
-        # Get only seo_done = TRUE rows from updated data
-        updated_true_df = updated_df[updated_df['seo_done'] == 'TRUE']
+        # Extract handles marked as seo_done = TRUE
+        done_handles = updated_df[updated_df['seo_done'] == 'TRUE']['Handle'].unique()
 
-        # Merge TRUE status back into base_df
-        merged_df = base_df.merge(
-            updated_true_df[['Handle', 'Image Src', 'seo_done']],
-            on=['Handle', 'Image Src'],
-            how='left'
-        )
-        base_df['seo_done'] = merged_df['seo_done'].fillna('')
+        # Mark seo_done = TRUE for all matching handles in base_df
+        base_df['seo_done'] = base_df['Handle'].apply(lambda h: 'TRUE' if h in done_handles else '')
     except s3.exceptions.NoSuchKey:
         base_df['seo_done'] = ''
 
@@ -122,6 +117,7 @@ def seo_editor_app(label, df, key):
         st.session_state['start_idx'] += batch_size
         st.rerun()
 
+# UI Tab Logic
 tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
 
 if tab == 'Wedding':
