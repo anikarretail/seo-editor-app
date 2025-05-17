@@ -70,7 +70,7 @@ def seo_editor_app(label, df, key):
     if st.button("✅ Submit This Batch"):
         for _, row in pending_batch.iterrows():
             new_text = row.get('new_desc')
-            if pd.notnull(new_text) and new_text.strip():
+            if pd.notnull(new_text) and new_text.strip() and df.at[original_index, 'seo_done'] != 'TRUE:
                 original_index = row['index']
                 df.at[original_index, 'desc (product.metafields.custom.desc)'] = new_text
                 df.at[original_index, 'SEO Description'] = new_text
