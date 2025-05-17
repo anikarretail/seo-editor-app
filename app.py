@@ -73,7 +73,7 @@ def seo_editor_app(label, df, key):
 
         # ✅ SNS notification
         try:
-            sns = boto3.client('sns')
+            sns = boto3.client('sns', region_name='us-west-2')
             sns.publish(
                 TopicArn='arn:aws:sns:us-west-2:568869123221:seo-review-complete',
                 Subject='SEO Review Complete',
