@@ -7,10 +7,7 @@ import io
 
 BUCKET = 'bandisha-shopify-files'
 TRENDING_KEY = 'shopify_trending.csv'
-WEDDING_KEY = 'shopify_wedding.csv'
-
 UPDATED_TRENDING = 'shopify_trending_updated.csv'
-UPDATED_WEDDING = 'shopify_wedding_updated.csv'
 
 s3 = boto3.client('s3')
 
@@ -53,8 +50,8 @@ def append_rows_by_handle(df, updated_handles, key):
     combined_df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
 
-def seo_editor_app(label, df, key):
-    st.header(f"📝 SEO Description Editor – {label}")
+def seo_editor_app(df, key):
+    st.header("📝 SEO Description Editor – Trending")
 
     if 'seo_done' not in df.columns:
         df['seo_done'] = ''
@@ -70,6 +67,11 @@ def seo_editor_app(label, df, key):
         (df['desc (product.metafields.custom.desc)'].notnull()) & 
         (df['seo_done'] == '')
     ].copy()
+
+    # ✅ If everything is done
+    if editable_df.empty:
+        st.success("✅ All trending products are complete! Nothing left to edit.")
+        return
 
     batch_size = 5
     if 'start_idx' not in st.session_state:
@@ -117,12 +119,6 @@ def seo_editor_app(label, df, key):
         st.session_state['start_idx'] += batch_size
         st.rerun()
 
-# UI Tab Logic
-tab = st.selectbox("Choose Product Type", ['Wedding', 'Trending'])
-
-if tab == 'Wedding':
-    df = load_data(WEDDING_KEY, UPDATED_WEDDING)
-    seo_editor_app("Wedding", df, UPDATED_WEDDING)
-elif tab == 'Trending':
-    df = load_data(TRENDING_KEY, UPDATED_TRENDING)
-    seo_editor_app("Trending", df, UPDATED_TRENDING)
+# 🚀 Load and launch app for trending products only
+df = load_data(TRENDING_KEY, UPDATED_TRENDING)
+seo_editor_app(df, UPDATED_TRENDING)
