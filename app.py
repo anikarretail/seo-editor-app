@@ -77,9 +77,8 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'seo_done'] = 'TRUE'
 
         # Save only rows where seo_done is not TRUE
-        unsaved_df = df[df['seo_done'] != 'TRUE'].drop(columns='index')
-        if not unsaved_df.empty:
-            save_data(unsaved_df, key)
+	# Save the full updated dataframe (includes new TRUEs)
+	save_data(df.drop(columns='index'), key)
 
         st.session_state['start_idx'] += batch_size
         st.rerun()
