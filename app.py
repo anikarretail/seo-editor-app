@@ -19,30 +19,22 @@ def load_data(key):
     obj = s3.get_object(Bucket=BUCKET, Key=key)
     return pd.read_csv(io.BytesIO(obj['Body'].read()))
 
-def merge_and_save_full_df(full_df, updated_rows, key):
+def append_rows_by_handle(df, updated_handles, key):
+    # Get all rows for updated handles
+    subset_df = df[df['Handle'].isin(updated_handles)].drop(columns='index')
+
+    # Try to read existing file and append
     try:
-        # Load previous version of updated file if it exists
-        obj = s3.get_object(Bucket=BUCKET, Key=key)
-        prev_df = pd.read_csv(io.BytesIO(obj['Body'].read()))
+        existing_obj = s3.get_object(Bucket=BUCKET, Key=key)
+        existing_df = pd.read_csv(io.BytesIO(existing_obj['Body'].read()))
+        combined_df = pd.concat([existing_df, subset_df], ignore_index=True)
     except s3.exceptions.NoSuchKey:
-        # No previous file, so start from full_df
-        prev_df = full_df.copy()
+        # No file exists yet
+        combined_df = subset_df
 
-    # Merge previous updates into full_df
-    for col in ['desc (product.metafields.custom.desc)', 'SEO Description', 'Body (HTML)', 'seo_done']:
-        if col in prev_df.columns:
-            full_df[col] = full_df[col].combine_first(prev_df[col])
-
-    # Overwrite only the rows edited in this batch
-    for _, row in updated_rows.iterrows():
-        mask = (full_df['Handle'] == row['Handle']) & (full_df['Image Src'] == row['Image Src'])
-        for col in ['desc (product.metafields.custom.desc)', 'SEO Description', 'Body (HTML)', 'seo_done']:
-            if col in row:
-                full_df.loc[mask, col] = row[col]
-
-    # Save full updated dataset
+    # Save combined version
     buffer = io.StringIO()
-    full_df.to_csv(buffer, index=False)
+    combined_df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
 
 def seo_editor_app(label, df, key):
@@ -91,7 +83,7 @@ def seo_editor_app(label, df, key):
             pending_batch.at[row.name, 'new_desc'] = new_desc
 
     if st.button("✅ Submit This Batch"):
-        updated_rows = []
+        updated_handles = set()
 
         for _, row in pending_batch.iterrows():
             new_text = row.get('new_desc')
@@ -101,12 +93,10 @@ def seo_editor_app(label, df, key):
                 df.at[original_index, 'SEO Description'] = new_text
                 df.at[original_index, 'Body (HTML)'] = new_text
                 df.at[original_index, 'seo_done'] = 'TRUE'
-                updated_rows.append(df.loc[original_index])
+                updated_handles.add(row['Handle'])
 
-        # Save full merged dataset with this batch's updates
-        if updated_rows:
-            updated_df = pd.DataFrame(updated_rows).drop(columns='index')
-            merge_and_save_full_df(df.drop(columns='index'), updated_df, key)
+        if updated_handles:
+            append_rows_by_handle(df, updated_handles, key)
 
         st.session_state['start_idx'] += batch_size
         st.rerun()
