@@ -7,7 +7,10 @@ import io
 
 BUCKET = 'bandisha-shopify-files'
 TRENDING_KEY = 'shopify_trending.csv'
+WEDDING_KEY = 'shopify_wedding.csv'
+
 UPDATED_TRENDING = 'shopify_trending_updated.csv'
+UPDATED_WEDDING = 'shopify_wedding_updated.csv'
 
 s3 = boto3.client('s3')
 
@@ -26,21 +29,11 @@ def load_data(source_key, updated_key):
         updated_df = pd.read_csv(io.BytesIO(updated_obj['Body'].read()))
         updated_df.columns = updated_df.columns.str.strip()
 
-        # ✅ Debug print updated_df
-        st.subheader("🔍 Debug: Updated File Snapshot")
-        st.dataframe(updated_df.head(10))
-
         if 'seo_done' in updated_df.columns:
             true_handles = updated_df[updated_df['seo_done'].astype(str).str.upper() == 'TRUE']['Handle'].unique()
             base_df['seo_done'] = base_df['Handle'].apply(lambda h: 'TRUE' if h in true_handles else '')
-        else:
-            st.warning("⚠️ 'seo_done' column missing in updated file.")
     except s3.exceptions.NoSuchKey:
-        st.info("ℹ️ No existing updated file found. Starting fresh.")
-
-    # ✅ Show full df for debugging
-    st.subheader("📦 Debug: Final Merged DataFrame")
-    st.dataframe(base_df.head(20))
+        pass  # First time use
 
     return base_df
 
@@ -61,8 +54,8 @@ def append_rows_by_handle(df, updated_handles, key):
     combined_df.to_csv(buffer, index=False)
     s3.put_object(Bucket=BUCKET, Key=key, Body=buffer.getvalue())
 
-def seo_editor_app(df, key):
-    st.header("📝 SEO Description Editor – Trending")
+def seo_editor_app(label, df, key):
+    st.header(f"📝 SEO Description Editor – {label}")
 
     if 'seo_done' not in df.columns:
         df['seo_done'] = ''
@@ -80,7 +73,7 @@ def seo_editor_app(df, key):
     ].copy()
 
     if editable_df.empty:
-        st.success("✅ All trending products are complete! Nothing left to edit.")
+        st.success(f"✅ All {label.lower()} products are complete! Nothing left to edit.")
         return
 
     batch_size = 5
@@ -129,6 +122,12 @@ def seo_editor_app(df, key):
         st.session_state['start_idx'] += batch_size
         st.rerun()
 
-# 🚀 Load and launch app for trending products only (no cache)
-df = load_data(TRENDING_KEY, UPDATED_TRENDING)
-seo_editor_app(df, UPDATED_TRENDING)
+# 📦 Choose product type
+tab = st.selectbox("Choose Product Type", ['Trending', 'Wedding'])
+
+if tab == 'Trending':
+    df = load_data(TRENDING_KEY, UPDATED_TRENDING)
+    seo_editor_app("Trending", df, UPDATED_TRENDING)
+elif tab == 'Wedding':
+    df = load_data(WEDDING_KEY, UPDATED_WEDDING)
+    seo_editor_app("Wedding", df, UPDATED_WEDDING)
