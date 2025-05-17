@@ -67,12 +67,24 @@ def seo_editor_app(label, df, key):
         (df['seo_done'] == '')
     ].copy()
 
-    # **If nothing left to edit, show success and EXIT before the button.**
+    # ✅ Notify and exit if all done
     if editable.empty:
         st.success(f"✅ All {label.lower()} products are complete! Nothing left to edit.")
+
+        # ✅ SNS notification
+        try:
+            sns = boto3.client('sns')
+            sns.publish(
+                TopicArn='arn:aws:sns:us-west-2:568869123221:seo-review-complete',
+                Subject='SEO Review Complete',
+                Message=f'All {label} products have been reviewed for SEO and saved.'
+            )
+        except Exception as e:
+            st.warning(f"SNS notification failed: {e}")
+
         return
 
-    # Otherwise, show your batch UI + Submit
+    # Otherwise, show batch of 5 products
     batch_size = 5
     if 'start_idx' not in st.session_state:
         st.session_state['start_idx'] = 0
