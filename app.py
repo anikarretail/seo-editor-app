@@ -118,6 +118,8 @@ def seo_editor_app(label, df, key):
             append_rows_by_handle(df, updated_handles, key)
 
         st.session_state['start_idx'] += batch_size
+        if st.session_state['start_idx'] >= len(editable):
+            st.session_state['start_idx'] = 0
         st.rerun()
 
 # ——— UI Entry Point ——————————————
